@@ -50,36 +50,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [lastSync, setLastSync] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Refs for Sync to access latest state
+  // Refs for Sync to access latest state inside async functions
   const stateRef = useRef({
-    students, teachers, attendance, alumni, academicYears, holidays
+    students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl
   });
 
   useEffect(() => {
-    stateRef.current = { students, teachers, attendance, alumni, academicYears, holidays };
-  }, [students, teachers, attendance, alumni, academicYears, holidays]);
+    stateRef.current = { students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl };
+  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl]);
 
-  // Real-time Persistence (Local Storage)
+  // --- INITIALIZATION LOGIC ---
   useEffect(() => {
-    const saved = localStorage.getItem('absensi_app_data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.students) setStudents(parsed.students);
-        if (parsed.teachers) setTeachers(parsed.teachers);
-        if (parsed.attendance) setAttendance(parsed.attendance);
-        if (parsed.alumni) setAlumni(parsed.alumni);
-        if (parsed.academicYears) setAcademicYears(parsed.academicYears);
-        if (parsed.holidays) setHolidays(parsed.holidays);
-        if (parsed.headmaster) setHeadmaster(parsed.headmaster);
-        if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
-        if (parsed.lastSync) setLastSync(parsed.lastSync);
-      } catch (e) { console.error("Failed to load data", e); }
-    } else {
-        setGoogleScriptUrl(DEFAULT_SCRIPT_URL);
-    }
+    const initializeApp = async () => {
+      // 1. Try Local Storage first (Instant Load)
+      const saved = localStorage.getItem('absensi_app_data');
+      let hasLocalData = false;
+
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.students) setStudents(parsed.students);
+          if (parsed.teachers) setTeachers(parsed.teachers);
+          if (parsed.attendance) setAttendance(parsed.attendance);
+          if (parsed.alumni) setAlumni(parsed.alumni);
+          if (parsed.academicYears) setAcademicYears(parsed.academicYears);
+          if (parsed.holidays) setHolidays(parsed.holidays);
+          if (parsed.headmaster) setHeadmaster(parsed.headmaster);
+          if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
+          if (parsed.lastSync) setLastSync(parsed.lastSync);
+          
+          // Check if we actually have data, or if it's just initial state
+          if (parsed.students && parsed.students.length > 0 && parsed.students[0].id !== 's1') {
+             hasLocalData = true;
+          }
+        } catch (e) { console.error("Failed to load local data", e); }
+      }
+
+      // 2. ALWAYS Try to Sync from Cloud on startup
+      // This ensures if opened in a new browser, we get the data.
+      // We rely on DEFAULT_SCRIPT_URL if local storage didn't provide one.
+      const scriptUrl = saved ? JSON.parse(saved).googleScriptUrl || DEFAULT_SCRIPT_URL : DEFAULT_SCRIPT_URL;
+      
+      if (scriptUrl) {
+        setIsSyncing(true);
+        try {
+          // Pass the URL directly to avoid closure stale state issues during init
+          await performSyncFromCloud(scriptUrl);
+        } catch (e) {
+          console.error("Auto-sync failed on startup:", e);
+        } finally {
+          setIsSyncing(false);
+        }
+      }
+    };
+
+    initializeApp();
   }, []);
 
+  // Save to Local Storage on every change
   useEffect(() => {
     localStorage.setItem('absensi_app_data', JSON.stringify({ 
       students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync
@@ -154,7 +182,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- SYNC LOGIC ---
 
   const syncToCloud = async (silent = false) => {
-    if (!googleScriptUrl) return false;
+    const url = stateRef.current.googleScriptUrl;
+    if (!url) return false;
+    
     setIsSyncing(true);
     try {
       const payload = {
@@ -165,11 +195,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           Attendance: stateRef.current.attendance,
           Alumni: stateRef.current.alumni,
           Holidays: stateRef.current.holidays,
-          AcademicYears: stateRef.current.academicYears
+          AcademicYears: stateRef.current.academicYears,
+          Headmaster: [stateRef.current.headmaster] // Wrap in array for consistency
         }
       };
 
-      await fetch(googleScriptUrl, {
+      await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
@@ -187,30 +218,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Separated function so it can be called with a specific URL during init
+  const performSyncFromCloud = async (url: string) => {
+    const response = await fetch(url, {
+      method: 'POST', 
+      body: JSON.stringify({ action: 'read' })
+    });
+    
+    const data = await response.json();
+    
+    if (data) {
+      // Only update state if data exists in cloud
+      if (data.Students && Array.isArray(data.Students)) setStudents(data.Students);
+      if (data.Teachers && Array.isArray(data.Teachers)) setTeachers(data.Teachers);
+      if (data.Attendance && Array.isArray(data.Attendance)) setAttendance(data.Attendance);
+      if (data.Alumni && Array.isArray(data.Alumni)) setAlumni(data.Alumni);
+      if (data.Holidays && Array.isArray(data.Holidays)) setHolidays(data.Holidays);
+      if (data.AcademicYears && Array.isArray(data.AcademicYears)) setAcademicYears(data.AcademicYears);
+      if (data.Headmaster && Array.isArray(data.Headmaster) && data.Headmaster[0]) setHeadmaster(data.Headmaster[0]);
+      
+      const now = new Date().toLocaleString();
+      setLastSync(now);
+      return true;
+    }
+    return false;
+  };
+
   const syncFromCloud = async () => {
-    if (!googleScriptUrl) return false;
+    const url = stateRef.current.googleScriptUrl;
+    if (!url) return false;
     setIsSyncing(true);
     try {
-      const response = await fetch(googleScriptUrl, {
-        method: 'POST', 
-        body: JSON.stringify({ action: 'read' })
-      });
-      
-      const data = await response.json();
-      
-      if (data) {
-        if (data.Students) setStudents(data.Students);
-        if (data.Teachers) setTeachers(data.Teachers);
-        if (data.Attendance) setAttendance(data.Attendance);
-        if (data.Alumni) setAlumni(data.Alumni);
-        if (data.Holidays) setHolidays(data.Holidays);
-        if (data.AcademicYears) setAcademicYears(data.AcademicYears);
-        
-        const now = new Date().toLocaleString();
-        setLastSync(now);
-        return true;
-      }
-      return false;
+      return await performSyncFromCloud(url);
     } catch (e) {
       console.error("Sync Error", e);
       return false;
