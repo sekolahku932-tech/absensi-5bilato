@@ -4,7 +4,7 @@ import { useApp } from '../store';
 import { UserRole } from '../types';
 import { 
   LayoutDashboard, Users, UserCheck, Calendar, GraduationCap, 
-  Settings, LogOut, Menu, X, FileText, UserCog, Cloud, RefreshCw, Clock
+  Settings, LogOut, Menu, X, FileText, UserCog, Cloud, RefreshCw, Clock, Database
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -79,7 +79,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {(isAdmin || isTeacher) && (
             <>
               <MenuItem to="/alumni" icon={GraduationCap} label="Daftar Alumni" />
-              <MenuItem to="/settings" icon={Cloud} label="Integrasi Spreadsheet" />
+              <MenuItem to="/settings" icon={Database} label="Database & Sync" />
             </>
           )}
 

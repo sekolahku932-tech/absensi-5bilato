@@ -1,7 +1,8 @@
 
 import { AcademicYear, Headmaster, Student, Teacher, Holiday } from './types';
 
-export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwqXgbqCbf6t4GiW_5B4yZxvyHOzF8qHZJNSDLha-xlvW7xBe6cWwbVkbhcYBZfGZX83g/exec';
+// URL Script yang sudah di-hardcode agar langsung terhubung
+export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyQqeFCj9CRsKL7bK9JmPkQxy9CUxPks11pRGzTb0CRglXyUIMWJQrnn4lXjTCz3dUBbw/exec';
 
 export const INITIAL_HEADMASTER: Headmaster = {
   name: "Drs. H. Ahmad Fauzi, M.Pd",
