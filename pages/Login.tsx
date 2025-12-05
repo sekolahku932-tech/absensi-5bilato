@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../store';
 import { UserRole } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { School, User, Lock, Users } from 'lucide-react';
+import { User, Lock, Users } from 'lucide-react';
 
 const Login: React.FC = () => {
   const { login, students, teachers } = useApp();
@@ -60,8 +61,12 @@ const Login: React.FC = () => {
         
         {/* Left Side: Brand */}
         <div className="md:w-1/2 bg-blue-50 p-8 flex flex-col justify-center items-center text-center border-r border-blue-100">
-          <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center mb-6 shadow-lg">
-            <School size={48} className="text-white" />
+          <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 shadow-lg p-2 overflow-hidden">
+            <img 
+              src="https://drive.google.com/uc?export=view&id=1V4ZNw4dYOrfNjr0Kxqb-eD5z9KSzOxYZ" 
+              alt="Logo SDN 5 Bilato" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">SD NEGERI 5 BILATO</h1>
           <p className="text-gray-500 mb-8">Sistem Absensi Digital Terpadu</p>

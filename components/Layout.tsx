@@ -47,7 +47,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         md:relative md:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="p-6 border-b">
+        <div className="p-6 border-b flex flex-col items-center text-center">
+          <img 
+            src="https://drive.google.com/uc?export=view&id=1V4ZNw4dYOrfNjr0Kxqb-eD5z9KSzOxYZ" 
+            alt="Logo" 
+            className="w-16 h-16 object-contain mb-3"
+          />
           <h1 className="text-xl font-bold text-blue-700 leading-tight">SDN 5 BILATO</h1>
           <p className="text-xs text-gray-500 mt-1">Sistem Absensi Terpadu</p>
           <div className="mt-4 px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full inline-block">
@@ -55,7 +60,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </div>
 
-        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-180px)]">
+        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-220px)]">
           {!isParent && <MenuItem to="/" icon={LayoutDashboard} label="Dashboard" />}
           
           {(isAdmin || isTeacher) && (
