@@ -15,9 +15,15 @@ const AttendanceDaily: React.FC = () => {
   const [sentStatus, setSentStatus] = useState<Record<string, boolean>>({});
 
   const activeYear = academicYears.find(y => y.isActive);
+
+  // Helper untuk cek weekend menggunakan waktu lokal agar akurat
   const isWeekend = (dateStr: string) => {
-    const day = new Date(dateStr).getDay();
-    return day === 0 || day === 6; // Sunday or Saturday
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    // Construct date using local time: new Date(year, monthIndex, day)
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    const day = date.getDay();
+    return day === 0 || day === 6; // 0=Sunday, 6=Saturday
   };
 
   const getHoliday = (dateStr: string) => holidays.find(h => h.date === dateStr);
@@ -37,10 +43,10 @@ const AttendanceDaily: React.FC = () => {
     });
     setLocalAttendance(existing);
     setSentStatus({}); // Reset sent status on date/class change
-  }, [selectedDate, selectedClass, attendance]); 
+  }, [selectedDate, selectedClass, attendance, students]); 
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
-    if (isDayOff) return;
+    if (isDayOff) return; // Prevent change if day off
     setLocalAttendance(prev => ({ ...prev, [studentId]: status }));
   };
 
@@ -66,7 +72,7 @@ const AttendanceDaily: React.FC = () => {
     
     markAttendance(records);
     syncToCloud(true); 
-    alert('Data absensi berhasil disimpan & sedang dikirim ke Spreadsheet...');
+    alert('Data absensi berhasil disimpan secara lokal dan sedang dikirim ke Spreadsheet...');
   };
 
   const formatPhone = (phone: string | undefined) => {
@@ -157,7 +163,7 @@ const AttendanceDaily: React.FC = () => {
         localAttendance[sId] === type 
           ? `bg-${color}-600 text-white shadow-md` 
           : `bg-gray-100 text-gray-500 hover:bg-${color}-50 hover:text-${color}-600`
-      }`}
+      } ${isDayOff ? 'opacity-50 cursor-not-allowed' : ''}`}
       disabled={isDayOff}
     >
       {label}
@@ -198,13 +204,13 @@ const AttendanceDaily: React.FC = () => {
       </div>
 
       {isDayOff ? (
-        <div className="bg-red-50 border border-red-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 text-center">
+        <div className="bg-red-50 border border-red-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 text-center animate-pulse">
           <AlertCircle size={48} className="text-red-500 mb-2" />
           <h3 className="text-lg font-bold text-red-700">Tidak Ada Absensi Hari Ini</h3>
-          <p className="text-red-600">
+          <p className="text-red-600 font-medium">
             {getHoliday(selectedDate)?.description || "Hari Libur Akhir Pekan (Sabtu/Minggu)"}
           </p>
-          <p className="text-xs text-red-500 mt-2">Tombol simpan dinonaktifkan secara otomatis.</p>
+          <p className="text-xs text-red-500 mt-2">Tombol simpan dan input absensi dinonaktifkan.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">

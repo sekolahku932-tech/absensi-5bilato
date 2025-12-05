@@ -64,8 +64,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const initializeApp = async () => {
       // 1. Try Local Storage first (Instant Load)
       const saved = localStorage.getItem('absensi_app_data');
-      let hasLocalData = false;
-
+      
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -78,17 +77,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.headmaster) setHeadmaster(parsed.headmaster);
           if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
           if (parsed.lastSync) setLastSync(parsed.lastSync);
-          
-          // Check if we actually have data, or if it's just initial state
-          if (parsed.students && parsed.students.length > 0 && parsed.students[0].id !== 's1') {
-             hasLocalData = true;
-          }
         } catch (e) { console.error("Failed to load local data", e); }
       }
 
       // 2. ALWAYS Try to Sync from Cloud on startup
-      // This ensures if opened in a new browser, we get the data.
-      // We rely on DEFAULT_SCRIPT_URL if local storage didn't provide one.
       const scriptUrl = saved ? JSON.parse(saved).googleScriptUrl || DEFAULT_SCRIPT_URL : DEFAULT_SCRIPT_URL;
       
       if (scriptUrl) {
@@ -196,19 +188,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           Alumni: stateRef.current.alumni,
           Holidays: stateRef.current.holidays,
           AcademicYears: stateRef.current.academicYears,
-          Headmaster: [stateRef.current.headmaster] // Wrap in array for consistency
+          Headmaster: [stateRef.current.headmaster] 
         }
       };
 
+      // PERBAIKAN: Menggunakan content-type text/plain untuk menghindari Preflight CORS error
+      // Google Apps Script doPost akan menerima body sebagai string
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
       
       const now = new Date().toLocaleString();
       setLastSync(now);
+      if(!silent) console.log("Data sent to spreadsheet successfully");
       return true;
     } catch (e) {
       if (!silent) console.error("Sync Error", e);
@@ -222,15 +217,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const performSyncFromCloud = async (url: string) => {
     const response = await fetch(url, {
       method: 'POST', 
+      // Untuk Read, kita juga gunakan text/plain jika perlu, tapi biasanya fetch standard okay jika server allow.
+      // Namun untuk konsistensi dengan GAS Web App:
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'read' })
     });
     
     const data = await response.json();
     
     if (data) {
-      // Only update state if data exists in cloud
-      if (data.Students && Array.isArray(data.Students)) setStudents(data.Students);
-      if (data.Teachers && Array.isArray(data.Teachers)) setTeachers(data.Teachers);
+      // Fix Type Mismatch for ClassId (Convert to string just in case Excel sent numbers)
+      if (data.Students && Array.isArray(data.Students)) {
+        setStudents(data.Students.map((s: any) => ({...s, classId: String(s.classId), nisn: String(s.nisn)})));
+      }
+      if (data.Teachers && Array.isArray(data.Teachers)) {
+        setTeachers(data.Teachers.map((t: any) => ({...t, classId: t.classId ? String(t.classId) : ''})));
+      }
       if (data.Attendance && Array.isArray(data.Attendance)) setAttendance(data.Attendance);
       if (data.Alumni && Array.isArray(data.Alumni)) setAlumni(data.Alumni);
       if (data.Holidays && Array.isArray(data.Holidays)) setHolidays(data.Holidays);
