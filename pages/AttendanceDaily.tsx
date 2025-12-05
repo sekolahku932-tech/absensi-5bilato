@@ -37,7 +37,7 @@ const AttendanceDaily: React.FC = () => {
     });
     setLocalAttendance(existing);
     setSentStatus({}); // Reset sent status on date/class change
-  }, [selectedDate, selectedClass, attendance]); // removed filteredStudents from dep array to avoid loops, though memoized it would be better. But here it's derived.
+  }, [selectedDate, selectedClass, attendance]); 
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     if (isDayOff) return;
@@ -46,6 +46,13 @@ const AttendanceDaily: React.FC = () => {
 
   const handleSave = () => {
     if (!activeYear) return alert("Pilih tahun pelajaran aktif di dashboard");
+    
+    // Prevent saving on holidays/weekends
+    if (isDayOff) {
+      const holidayInfo = getHoliday(selectedDate);
+      const msg = holidayInfo ? `Hari Libur: ${holidayInfo.description}` : "Akhir Pekan (Sabtu/Minggu)";
+      return alert(`Tidak dapat menyimpan absensi. Hari ini adalah ${msg}.`);
+    }
     
     const records: AttendanceRecord[] = Object.entries(localAttendance)
       .filter(([_, status]) => status !== AttendanceStatus.NONE)
@@ -191,11 +198,13 @@ const AttendanceDaily: React.FC = () => {
       </div>
 
       {isDayOff ? (
-        <div className="bg-red-50 border border-red-200 p-6 rounded-xl flex items-center justify-center space-x-3 text-red-700">
-          <AlertCircle />
-          <span className="font-medium">
-            Tidak ada absensi pada hari ini ({getHoliday(selectedDate)?.description || "Hari Libur / Akhir Pekan"})
-          </span>
+        <div className="bg-red-50 border border-red-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 text-center">
+          <AlertCircle size={48} className="text-red-500 mb-2" />
+          <h3 className="text-lg font-bold text-red-700">Tidak Ada Absensi Hari Ini</h3>
+          <p className="text-red-600">
+            {getHoliday(selectedDate)?.description || "Hari Libur Akhir Pekan (Sabtu/Minggu)"}
+          </p>
+          <p className="text-xs text-red-500 mt-2">Tombol simpan dinonaktifkan secara otomatis.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">

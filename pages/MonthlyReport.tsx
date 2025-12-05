@@ -60,7 +60,15 @@ const MonthlyReport: React.FC = () => {
   const calculateStats = (studentId: string) => {
     const studentRecords = attendance.filter(a => {
       const d = new Date(a.date);
-      return a.studentId === studentId && d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isHoliday = holidays.some(h => h.date === a.date);
+      
+      // Strict check: Only count attendance record if it is NOT a weekend and NOT a holiday
+      // This prevents "ghost" attendance if admin adds a holiday retroactively.
+      return a.studentId === studentId && 
+             d.getMonth() + 1 === selectedMonth && 
+             d.getFullYear() === selectedYear &&
+             !isWeekend && !isHoliday;
     });
 
     return {
@@ -110,8 +118,8 @@ const MonthlyReport: React.FC = () => {
           table { width: 100%; border-collapse: collapse; font-size: 10px; }
           th, td { border: 1px solid black; padding: 4px; text-align: center; }
           .header { text-align: center; margin-bottom: 20px; }
-          .bg-gray { background-color: #ddd; }
-          .bg-red { background-color: #ffcccc; }
+          .bg-gray { background-color: #ddd !important; -webkit-print-color-adjust: exact; }
+          .bg-red { background-color: #ffcccc !important; -webkit-print-color-adjust: exact; }
           .recap-section { margin-top: 20px; font-size: 11px; width: 40%; }
           .recap-section th { text-align: left; background-color: #f0f0f0; }
           .footer { margin-top: 40px; display: flex; justify-content: space-between; }
@@ -148,6 +156,7 @@ const MonthlyReport: React.FC = () => {
                 let cls = '';
                 if (st.color.includes('gray')) cls = 'bg-gray';
                 if (st.color.includes('red') && st.code === 'L') cls = 'bg-red';
+                // Render empty cell for holidays (L) to match "Tidak Ada Absen" visual
                 cells += `<td class="${cls}">${st.code === 'L' || st.code === '' ? '' : st.code}</td>`;
               }
               return `
@@ -215,7 +224,8 @@ const MonthlyReport: React.FC = () => {
       let row = `${i + 1},"${s.nisn}","${s.name}",${s.classId}`;
       daysArray.forEach(d => {
         const st = getDayStatus(s.id, d);
-        row += `,${st.code === 'L' ? 'L' : st.code === '-' ? '' : st.code}`;
+        // Ensure holidays are empty in excel too to represent "No Absen"
+        row += `,${st.code === 'L' ? '' : st.code === '-' ? '' : st.code}`;
       });
       const stats = calculateStats(s.id);
       row += `,${stats.H},${stats.S},${stats.I},${stats.A}`;
@@ -326,9 +336,11 @@ const MonthlyReport: React.FC = () => {
                     <td className="p-2 border text-center font-bold">{s.classId}</td>
                     {daysArray.map(d => {
                       const { code, color } = getDayStatus(s.id, d);
+                      // Visual logic: Holiday cells should be empty to match "Tiada Absen"
+                      const displayCode = code === 'L' ? '' : code;
                       return (
                         <td key={d} className={`p-1 border text-center ${color}`}>
-                          {code === 'L' ? '' : code}
+                          {displayCode}
                         </td>
                       );
                     })}
