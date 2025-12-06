@@ -16,37 +16,43 @@ const MonthlyReport: React.FC = () => {
 
   const activeYearName = academicYears.find(y => y.isActive)?.name || "-";
   
-  // Filter students AND Sort by Class then Name
   const filteredStudents = students.filter(s => 
     (selectedClass === 'ALL' ? true : s.classId === selectedClass) && s.isActive
   ).sort((a, b) => {
-    // Sort by Class first
     const classCompare = a.classId.localeCompare(b.classId, undefined, { numeric: true });
     if (classCompare !== 0) return classCompare;
-    // Then by Name
     return a.name.localeCompare(b.name);
   });
 
-  // Helper to check effective days
-  const isSchoolDay = (day: number) => {
+  // --- LOGIKA DATE CHECKING YANG KONSISTEN ---
+  const normalizeDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    return dateStr.trim().split('T')[0];
+  };
+
+  const checkDayType = (day: number) => {
+    // Parse manual: YYYY, MM (0-indexed), DD
     const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const dateObj = new Date(dateStr);
+    
+    // FIX: Gunakan jam 12:00:00 (Noon) untuk mencegah bug timezone saat menentukan hari dalam minggu (Weekend)
+    const dateObj = new Date(selectedYear, selectedMonth - 1, day, 12, 0, 0);
+    
     const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-    const isHoliday = holidays.some(h => h.date === dateStr);
-    return !isWeekend && !isHoliday;
+    
+    // Exact string match for holidays
+    const isHoliday = holidays.some(h => normalizeDate(h.date) === dateStr);
+
+    return { dateStr, isWeekend, isHoliday };
   };
 
   const getDayStatus = (studentId: string, day: number) => {
-    const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const record = attendance.find(a => a.studentId === studentId && a.date === dateStr);
+    const { dateStr, isWeekend, isHoliday } = checkDayType(day);
     
-    // Check holiday/weekend
-    const dateObj = new Date(dateStr);
-    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-    const isHoliday = holidays.some(h => h.date.trim() === dateStr);
-    
-    if (isHoliday) return { code: 'L', color: 'bg-red-300' }; // Merah lebih jelas untuk hari libur
+    // PRIORITAS: Libur > Weekend > Data Absensi
+    if (isHoliday) return { code: 'L', color: 'bg-red-400 text-white' }; 
     if (isWeekend) return { code: '', color: 'bg-gray-200' };
+
+    const record = attendance.find(a => a.studentId === studentId && a.date === dateStr);
     
     if (record) {
       return { 
@@ -59,15 +65,17 @@ const MonthlyReport: React.FC = () => {
 
   const calculateStats = (studentId: string) => {
     const studentRecords = attendance.filter(a => {
-      const d = new Date(a.date);
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      const isHoliday = holidays.some(h => h.date === a.date);
+      // Manual parse untuk validasi
+      const [y, m, d] = a.date.split('-').map(Number);
+      // Gunakan juga jam 12:00 saat rekonstruksi date untuk filter
+      const recDate = new Date(y, m-1, d, 12, 0, 0);
+      const isWk = recDate.getDay() === 0 || recDate.getDay() === 6;
+      const isHol = holidays.some(h => normalizeDate(h.date) === a.date);
       
-      // Strict check: Only count attendance record if it is NOT a weekend and NOT a holiday
       return a.studentId === studentId && 
-             d.getMonth() + 1 === selectedMonth && 
-             d.getFullYear() === selectedYear &&
-             !isWeekend && !isHoliday;
+             (m) === selectedMonth && 
+             y === selectedYear &&
+             !isWk && !isHol; // Jangan hitung jika hari libur
     });
 
     return {
@@ -89,10 +97,10 @@ const MonthlyReport: React.FC = () => {
     totalA += stats.A;
   });
 
-  // Calculate Effective Days
   let effectiveDaysCount = 0;
   daysArray.forEach(d => {
-    if (isSchoolDay(d)) effectiveDaysCount++;
+    const { isWeekend, isHoliday } = checkDayType(d);
+    if (!isWeekend && !isHoliday) effectiveDaysCount++;
   });
 
   const totalPossibleAttendance = filteredStudents.length * effectiveDaysCount;
@@ -100,6 +108,7 @@ const MonthlyReport: React.FC = () => {
     ? ((totalH / totalPossibleAttendance) * 100).toFixed(2) 
     : "0.00";
 
+  // --- PRINT HANDLER ---
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -118,9 +127,8 @@ const MonthlyReport: React.FC = () => {
           th, td { border: 1px solid black; padding: 4px; text-align: center; }
           .header { text-align: center; margin-bottom: 20px; }
           .bg-gray { background-color: #ddd !important; -webkit-print-color-adjust: exact; }
-          .bg-red { background-color: #f87171 !important; -webkit-print-color-adjust: exact; color: white; }
+          .bg-red { background-color: #ef4444 !important; color: white !important; -webkit-print-color-adjust: exact; }
           .recap-section { margin-top: 20px; font-size: 11px; width: 40%; }
-          .recap-section th { text-align: left; background-color: #f0f0f0; }
           .footer { margin-top: 40px; display: flex; justify-content: space-between; }
           .signature { text-align: center; }
         </style>
@@ -129,7 +137,7 @@ const MonthlyReport: React.FC = () => {
         <div class="header">
           <h2>REKAPITULASI ABSENSI SISWA</h2>
           <h3>SD NEGERI 5 BILATO</h3>
-          <p>Kelas: ${selectedClass === 'ALL' ? 'Semua Kelas' : selectedClass} | Bulan: ${monthName} ${selectedYear} | TP: ${activeYearName}</p>
+          <p>Kelas: ${selectedClass === 'ALL' ? 'Semua Kelas' : selectedClass} | Bulan: ${monthName} ${selectedYear}</p>
         </div>
         <table>
           <thead>
@@ -143,12 +151,10 @@ const MonthlyReport: React.FC = () => {
             </tr>
             <tr>
               ${daysArray.map(d => {
-                const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const isHol = holidays.some(h => h.date.trim() === dateStr);
-                const isWk = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6;
+                const { isWeekend, isHoliday } = checkDayType(d);
                 let thClass = "";
-                if(isHol) thClass = "bg-red";
-                else if(isWk) thClass = "bg-gray";
+                if(isHoliday) thClass = "bg-red";
+                else if(isWeekend) thClass = "bg-gray";
                 return `<th class="${thClass}">${d}</th>`;
               }).join('')}
               <th>H</th><th>S</th><th>I</th><th>A</th>
@@ -179,15 +185,14 @@ const MonthlyReport: React.FC = () => {
           </tbody>
         </table>
 
-        <!-- REKAPITULASI BAWAH -->
         <div class="recap-section">
            <table>
              <tr><th colspan="2">REKAPITULASI KEHADIRAN</th></tr>
-             <tr><td style="text-align:left">Sakit (S)</td><td>${totalS}</td></tr>
-             <tr><td style="text-align:left">Izin (I)</td><td>${totalI}</td></tr>
-             <tr><td style="text-align:left">Alpa (A)</td><td>${totalA}</td></tr>
-             <tr><td style="text-align:left">Hadir (H)</td><td>${totalH}</td></tr>
-             <tr><td style="text-align:left; font-weight:bold;">Persentase Kehadiran</td><td style="font-weight:bold;">${attendancePercentage}%</td></tr>
+             <tr><td style="text-align:left">Sakit</td><td>${totalS}</td></tr>
+             <tr><td style="text-align:left">Izin</td><td>${totalI}</td></tr>
+             <tr><td style="text-align:left">Alpa</td><td>${totalA}</td></tr>
+             <tr><td style="text-align:left">Hadir</td><td>${totalH}</td></tr>
+             <tr><td style="text-align:left; font-weight:bold;">Persentase</td><td style="font-weight:bold;">${attendancePercentage}%</td></tr>
            </table>
         </div>
 
@@ -219,18 +224,15 @@ const MonthlyReport: React.FC = () => {
     let csvContent = `Laporan Absensi Bulan ${monthName} ${selectedYear}\n`;
     csvContent += `Kelas: ${selectedClass}\n\n`;
     
-    // Header
     let header = "No,NISN,Nama Siswa,Kelas";
     daysArray.forEach(d => header += `,${d}`);
     header += ",H,S,I,A\n";
     csvContent += header;
 
-    // Body
     filteredStudents.forEach((s, i) => {
       let row = `${i + 1},"${s.nisn}","${s.name}",${s.classId}`;
       daysArray.forEach(d => {
         const st = getDayStatus(s.id, d);
-        // Ensure holidays are empty in excel too to represent "No Absen"
         row += `,${st.code === 'L' ? '' : st.code === '-' ? '' : st.code}`;
       });
       const stats = calculateStats(s.id);
@@ -238,15 +240,9 @@ const MonthlyReport: React.FC = () => {
       csvContent += row + "\n";
     });
 
-    // Footer Recap
     csvContent += `\n\nREKAPITULASI\n`;
-    csvContent += `Sakit,${totalS}\n`;
-    csvContent += `Izin,${totalI}\n`;
-    csvContent += `Alpa,${totalA}\n`;
-    csvContent += `Hadir,${totalH}\n`;
-    csvContent += `Persentase Kehadiran,${attendancePercentage}%\n`;
+    csvContent += `Sakit,${totalS}\nIzin,${totalI}\nAlpa,${totalA}\nHadir,${totalH}\nPersentase,${attendancePercentage}%\n`;
 
-    // Create download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -294,17 +290,14 @@ const MonthlyReport: React.FC = () => {
           <button 
             onClick={handleDownloadExcel}
             className="flex items-center space-x-2 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700"
-            title="Download Excel (CSV)"
           >
-            <FileSpreadsheet size={16} />
-            <span className="hidden md:inline">Excel</span>
+            <FileSpreadsheet size={16} /> <span className="hidden md:inline">Excel</span>
           </button>
           <button 
             onClick={handlePrint}
             className="flex items-center space-x-2 bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900"
           >
-            <Printer size={16} />
-            <span className="hidden md:inline">Cetak</span>
+            <Printer size={16} /> <span className="hidden md:inline">Cetak</span>
           </button>
         </div>
       </div>
@@ -314,21 +307,19 @@ const MonthlyReport: React.FC = () => {
           <table className="w-full text-xs md:text-sm border-collapse">
             <thead>
               <tr className="bg-blue-50 text-blue-900">
-                <th rowSpan={2} className="p-2 border border-blue-100 min-w-[30px]">No</th>
-                <th rowSpan={2} className="p-2 border border-blue-100 min-w-[100px]">NISN</th>
+                <th rowSpan={2} className="p-2 border border-blue-100">No</th>
+                <th rowSpan={2} className="p-2 border border-blue-100">NISN</th>
                 <th rowSpan={2} className="p-2 border border-blue-100 min-w-[150px] sticky left-0 bg-blue-50 z-10">Nama Siswa</th>
-                <th rowSpan={2} className="p-2 border border-blue-100 min-w-[50px]">Kelas</th>
+                <th rowSpan={2} className="p-2 border border-blue-100">Kelas</th>
                 <th colSpan={daysInMonth} className="p-2 border border-blue-100 text-center">Tanggal</th>
                 <th colSpan={4} className="p-2 border border-blue-100 text-center">Total</th>
               </tr>
               <tr className="bg-blue-50 text-blue-900">
                 {daysArray.map(d => {
-                   const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                   const isHol = holidays.some(h => h.date.trim() === dateStr);
-                   const isWk = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6;
+                   const { isWeekend, isHoliday } = checkDayType(d);
                    let bgClass = "";
-                   if (isHol) bgClass = "bg-red-300 text-red-900";
-                   else if (isWk) bgClass = "bg-gray-200";
+                   if (isHoliday) bgClass = "bg-red-400 text-white";
+                   else if (isWeekend) bgClass = "bg-gray-200";
 
                    return (
                      <th key={d} className={`p-1 border border-blue-100 w-8 text-center ${bgClass}`}>
@@ -336,10 +327,10 @@ const MonthlyReport: React.FC = () => {
                      </th>
                    )
                 })}
-                <th className="p-1 border border-blue-100 bg-green-100">H</th>
-                <th className="p-1 border border-blue-100 bg-yellow-100">S</th>
-                <th className="p-1 border border-blue-100 bg-blue-100">I</th>
-                <th className="p-1 border border-blue-100 bg-red-100">A</th>
+                <th className="p-1 border bg-green-100">H</th>
+                <th className="p-1 border bg-yellow-100">S</th>
+                <th className="p-1 border bg-blue-100">I</th>
+                <th className="p-1 border bg-red-100">A</th>
               </tr>
             </thead>
             <tbody>
@@ -348,12 +339,11 @@ const MonthlyReport: React.FC = () => {
                 return (
                   <tr key={s.id} className="hover:bg-gray-50">
                     <td className="p-2 border text-center">{idx + 1}</td>
-                    <td className="p-2 border text-center text-gray-600 font-mono text-xs">{s.nisn}</td>
-                    <td className="p-2 border font-medium sticky left-0 bg-white z-10 shadow-r">{s.name}</td>
+                    <td className="p-2 border text-center text-xs font-mono">{s.nisn}</td>
+                    <td className="p-2 border font-medium sticky left-0 bg-white z-10">{s.name}</td>
                     <td className="p-2 border text-center font-bold">{s.classId}</td>
                     {daysArray.map(d => {
                       const { code, color } = getDayStatus(s.id, d);
-                      // Visual logic: Holiday cells should be empty to match "Tiada Absen"
                       const displayCode = code === 'L' ? '' : code;
                       return (
                         <td key={d} className={`p-1 border text-center ${color}`}>
@@ -373,39 +363,22 @@ const MonthlyReport: React.FC = () => {
         </div>
       </div>
 
-      {/* REKAP UI */}
+      {/* REKAP CARD */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">Rekapitulasi Kehadiran (Total)</h3>
-          <div className="space-y-2 text-sm">
-             <div className="flex justify-between items-center p-2 bg-green-50 rounded">
-                <span className="text-green-800 font-medium">Hadir</span>
-                <span className="font-bold text-green-700">{totalH}</span>
-             </div>
-             <div className="flex justify-between items-center p-2 bg-yellow-50 rounded">
-                <span className="text-yellow-800 font-medium">Sakit</span>
-                <span className="font-bold text-yellow-700">{totalS}</span>
-             </div>
-             <div className="flex justify-between items-center p-2 bg-blue-50 rounded">
-                <span className="text-blue-800 font-medium">Izin</span>
-                <span className="font-bold text-blue-700">{totalI}</span>
-             </div>
-             <div className="flex justify-between items-center p-2 bg-red-50 rounded">
-                <span className="text-red-800 font-medium">Alpa</span>
-                <span className="font-bold text-red-700">{totalA}</span>
-             </div>
+          <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">Rekapitulasi (Semua Siswa Ditampilkan)</h3>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+             <div className="p-2 bg-green-50 rounded flex justify-between"><span className="text-green-800">Hadir</span><span className="font-bold">{totalH}</span></div>
+             <div className="p-2 bg-yellow-50 rounded flex justify-between"><span className="text-yellow-800">Sakit</span><span className="font-bold">{totalS}</span></div>
+             <div className="p-2 bg-blue-50 rounded flex justify-between"><span className="text-blue-800">Izin</span><span className="font-bold">{totalI}</span></div>
+             <div className="p-2 bg-red-50 rounded flex justify-between"><span className="text-red-800">Alpa</span><span className="font-bold">{totalA}</span></div>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
-           <h3 className="font-bold text-gray-700 mb-2">Persentase Kehadiran</h3>
-           <div className="text-4xl font-extrabold text-blue-600 my-2">
-             {attendancePercentage}%
-           </div>
-           <p className="text-xs text-gray-400">
-             (Hadir / (Jml Siswa x Hari Efektif)) x 100%<br/>
-             Hari Efektif Bulan Ini: {effectiveDaysCount} hari
-           </p>
+           <h3 className="font-bold text-gray-700">Persentase Kehadiran</h3>
+           <div className="text-4xl font-extrabold text-blue-600 my-2">{attendancePercentage}%</div>
+           <p className="text-xs text-gray-400">Hari Efektif: {effectiveDaysCount}</p>
         </div>
       </div>
     </div>

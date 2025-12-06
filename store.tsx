@@ -130,7 +130,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.headmaster) setHeadmaster(parsed.headmaster);
           if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
           if (parsed.lastSync) setLastSync(parsed.lastSync);
-          // Removed logoUrl loading to prevent broken images
         } catch (e) { console.error("Failed to load local data", e); }
       }
 
@@ -176,14 +175,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteStudent = (id: string) => setStudents(prev => prev.filter(s => s.id !== id));
 
   const moveToAlumni = (studentId: string, reason: AlumniReason, date: string) => {
-    // Need to find student from current state to ensure valid data
     setStudents(prevStudents => {
       const student = prevStudents.find(s => s.id === studentId);
       if (!student) return prevStudents;
-
-      // Add to Alumni inside the same operation to avoid race conditions if possible, 
-      // but since they are separate states, we just need to ensure we read valid data.
-      // We will update Alumni state separately using functional update.
       
       const activeYear = academicYears.find(y => y.isActive)?.name || 'Unknown';
       const newAlumni: Alumni = {
@@ -195,8 +189,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       
       setAlumni(prevAlumni => [...prevAlumni, newAlumni]);
-      
-      // Return filtered students
       return prevStudents.filter(s => s.id !== studentId);
     });
   };
@@ -242,6 +234,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const data = await response.json();
     
+    // --- DATE SANITIZER FUNCTION ---
+    // Fixes the "Day before" bug caused by Timezone differences (UTC vs Local)
+    const sanitizeDate = (dateVal: any) => {
+      if (!dateVal) return '';
+      const s = String(dateVal);
+      // If it looks like ISO Z format (UTC from Spreadsheet) e.g. 2024-05-24T17:00:00.000Z
+      if (s.includes('T') && s.includes('Z')) {
+         const d = new Date(s);
+         // Add 12 hours to shift from "Yesterday Afternoon UTC" to "Today Morning Local"
+         d.setTime(d.getTime() + (12 * 60 * 60 * 1000));
+         return d.toISOString().split('T')[0];
+      }
+      // If it's already YYYY-MM-DD
+      return s.split('T')[0];
+    };
+    
     if (data) {
       if (data.Students && Array.isArray(data.Students)) {
         setStudents(data.Students.map((s: any) => ({...s, classId: String(s.classId), nisn: String(s.nisn)})));
@@ -249,9 +257,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (data.Teachers && Array.isArray(data.Teachers)) {
         setTeachers(data.Teachers.map((t: any) => ({...t, classId: t.classId ? String(t.classId) : ''})));
       }
-      if (data.Attendance && Array.isArray(data.Attendance)) setAttendance(data.Attendance);
-      if (data.Alumni && Array.isArray(data.Alumni)) setAlumni(data.Alumni);
-      if (data.Holidays && Array.isArray(data.Holidays)) setHolidays(data.Holidays);
+      
+      // Apply Date Sanitizer to date-sensitive fields
+      if (data.Attendance && Array.isArray(data.Attendance)) {
+        setAttendance(data.Attendance.map((a: any) => ({
+            ...a,
+            date: sanitizeDate(a.date)
+        })));
+      }
+      if (data.Holidays && Array.isArray(data.Holidays)) {
+         setHolidays(data.Holidays.map((h: any) => ({
+             ...h,
+             date: sanitizeDate(h.date)
+         })));
+      }
+      if (data.Alumni && Array.isArray(data.Alumni)) {
+         setAlumni(data.Alumni.map((a: any) => ({
+             ...a,
+             dateLeft: sanitizeDate(a.dateLeft)
+         })));
+      }
+
       if (data.AcademicYears && Array.isArray(data.AcademicYears)) setAcademicYears(data.AcademicYears);
       if (data.Headmaster && Array.isArray(data.Headmaster) && data.Headmaster[0]) setHeadmaster(data.Headmaster[0]);
       
