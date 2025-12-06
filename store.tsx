@@ -6,7 +6,7 @@ import {
 } from './types';
 import { 
   INITIAL_STUDENTS, INITIAL_TEACHERS, INITIAL_YEARS, 
-  INITIAL_HOLIDAYS, INITIAL_HEADMASTER, DEFAULT_SCRIPT_URL, DEFAULT_LOGO_URL 
+  INITIAL_HOLIDAYS, INITIAL_HEADMASTER, DEFAULT_SCRIPT_URL
 } from './constants';
 
 interface AppContextType extends AppState {
@@ -28,8 +28,6 @@ interface AppContextType extends AppState {
   toggleHoliday: (h: Holiday) => void;
   deleteHoliday: (id: string) => void;
   
-  updateLogo: (url: string) => void; // Function to update logo
-
   // Sync
   setGoogleScriptUrl: (url: string) => void;
   syncToCloud: (silent?: boolean) => Promise<boolean>;
@@ -49,8 +47,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [headmaster, setHeadmaster] = useState<Headmaster>(INITIAL_HEADMASTER);
   const [currentUser, setCurrentUser] = useState<AppState['currentUser']>(null);
   
-  const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO_URL);
-
   const [googleScriptUrl, setGoogleScriptUrl] = useState<string>(DEFAULT_SCRIPT_URL);
   const [lastSync, setLastSync] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -134,7 +130,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.headmaster) setHeadmaster(parsed.headmaster);
           if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
           if (parsed.lastSync) setLastSync(parsed.lastSync);
-          if (parsed.logoUrl) setLogoUrl(parsed.logoUrl);
+          // Removed logoUrl loading to prevent broken images
         } catch (e) { console.error("Failed to load local data", e); }
       }
 
@@ -158,9 +154,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Save to Local Storage on every change
   useEffect(() => {
     localStorage.setItem('absensi_app_data', JSON.stringify({ 
-      students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync, logoUrl
+      students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync
     }));
-  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync, logoUrl]);
+  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync]);
 
   const login = (role: UserRole, data?: any) => {
     if (role === UserRole.ADMIN) {
@@ -174,25 +170,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => setCurrentUser(null);
 
-  const addStudent = (s: Student) => setStudents([...students, s]);
-  const updateStudent = (s: Student) => setStudents(students.map(st => st.id === s.id ? s : st));
-  const deleteStudent = (id: string) => setStudents(students.filter(s => s.id !== id));
+  // CRITICAL FIX: Use functional updates (prev => ...) to allow bulk operations in loops
+  const addStudent = (s: Student) => setStudents(prev => [...prev, s]);
+  const updateStudent = (s: Student) => setStudents(prev => prev.map(st => st.id === s.id ? s : st));
+  const deleteStudent = (id: string) => setStudents(prev => prev.filter(s => s.id !== id));
 
   const moveToAlumni = (studentId: string, reason: AlumniReason, date: string) => {
-    const student = students.find(s => s.id === studentId);
-    if (!student) return;
-    
-    const activeYear = academicYears.find(y => y.isActive)?.name || 'Unknown';
-    const newAlumni: Alumni = {
-      ...student,
-      reason,
-      dateLeft: date,
-      lastClassId: student.classId,
-      academicYear: activeYear
-    };
-    
-    setAlumni([...alumni, newAlumni]);
-    setStudents(students.filter(s => s.id !== studentId));
+    // Need to find student from current state to ensure valid data
+    setStudents(prevStudents => {
+      const student = prevStudents.find(s => s.id === studentId);
+      if (!student) return prevStudents;
+
+      // Add to Alumni inside the same operation to avoid race conditions if possible, 
+      // but since they are separate states, we just need to ensure we read valid data.
+      // We will update Alumni state separately using functional update.
+      
+      const activeYear = academicYears.find(y => y.isActive)?.name || 'Unknown';
+      const newAlumni: Alumni = {
+        ...student,
+        reason,
+        dateLeft: date,
+        lastClassId: student.classId,
+        academicYear: activeYear
+      };
+      
+      setAlumni(prevAlumni => [...prevAlumni, newAlumni]);
+      
+      // Return filtered students
+      return prevStudents.filter(s => s.id !== studentId);
+    });
   };
 
   const promoteStudent = (id: string, newClassId: string, newYearId: string) => {
@@ -208,26 +214,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateHeadmaster = (h: Headmaster) => setHeadmaster(h);
   
-  const addTeacher = (t: Teacher) => setTeachers([...teachers, t]);
-  const updateTeacher = (t: Teacher) => setTeachers(teachers.map(x => x.id === t.id ? t : x));
-  const deleteTeacher = (id: string) => setTeachers(teachers.filter(x => x.id !== id));
+  const addTeacher = (t: Teacher) => setTeachers(prev => [...prev, t]);
+  const updateTeacher = (t: Teacher) => setTeachers(prev => prev.map(x => x.id === t.id ? t : x));
+  const deleteTeacher = (id: string) => setTeachers(prev => prev.filter(x => x.id !== id));
 
   const setAcademicYear = (id: string) => {
-    setAcademicYears(academicYears.map(y => ({ ...y, isActive: y.id === id })));
+    setAcademicYears(prev => prev.map(y => ({ ...y, isActive: y.id === id })));
   };
 
   const addAcademicYear = (name: string) => {
-    setAcademicYears([...academicYears, { id: Date.now().toString(), name, isActive: false }]);
+    setAcademicYears(prev => [...prev, { id: Date.now().toString(), name, isActive: false }]);
   };
 
   const deleteAcademicYear = (id: string) => {
-    setAcademicYears(academicYears.filter(y => y.id !== id));
+    setAcademicYears(prev => prev.filter(y => y.id !== id));
   };
 
-  const toggleHoliday = (h: Holiday) => setHolidays([...holidays, h]);
-  const deleteHoliday = (id: string) => setHolidays(holidays.filter(h => h.id !== id));
-
-  const updateLogo = (url: string) => setLogoUrl(url);
+  const toggleHoliday = (h: Holiday) => setHolidays(prev => [...prev, h]);
+  const deleteHoliday = (id: string) => setHolidays(prev => prev.filter(h => h.id !== id));
 
   const performSyncFromCloud = async (url: string) => {
     const response = await fetch(url, {
@@ -275,11 +279,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       students, teachers, attendance, academicYears, holidays, headmaster, currentUser, alumni,
-      googleScriptUrl, lastSync, isSyncing, logoUrl,
+      googleScriptUrl, lastSync, isSyncing,
       login, logout, addStudent, updateStudent, deleteStudent, promoteStudent, moveToAlumni,
       markAttendance, updateHeadmaster, addTeacher, updateTeacher, deleteTeacher,
       setAcademicYear, addAcademicYear, deleteAcademicYear, toggleHoliday, deleteHoliday,
-      setGoogleScriptUrl, syncToCloud, syncFromCloud, triggerSave, updateLogo
+      setGoogleScriptUrl, syncToCloud, syncFromCloud, triggerSave
     }}>
       {children}
     </AppContext.Provider>

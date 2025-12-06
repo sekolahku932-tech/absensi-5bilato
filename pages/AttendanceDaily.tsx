@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
 import { UserRole, AttendanceStatus, AttendanceRecord, Student } from '../types';
-import { Save, MessageCircle, AlertCircle, Share2, Send, X, CheckCircle, Smartphone } from 'lucide-react';
+import { Save, MessageCircle, AlertCircle, Share2, Send, X, CheckCircle, Smartphone, CalendarOff, Upload } from 'lucide-react';
 
 const AttendanceDaily: React.FC = () => {
   const { students, attendance, holidays, markAttendance, currentUser, academicYears, triggerSave } = useApp();
@@ -14,20 +14,29 @@ const AttendanceDaily: React.FC = () => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [sentStatus, setSentStatus] = useState<Record<string, boolean>>({});
 
+  // Import Excel State
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+
   const activeYear = academicYears.find(y => y.isActive);
 
   // Helper untuk cek weekend menggunakan waktu lokal agar akurat
   const isWeekend = (dateStr: string) => {
     if (!dateStr) return false;
-    const parts = dateStr.split('-').map(Number);
-    // Construct date using local time: new Date(year, monthIndex, day)
-    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    const date = new Date(dateStr);
     const day = date.getDay();
     return day === 0 || day === 6; // 0=Sunday, 6=Saturday
   };
 
-  const getHoliday = (dateStr: string) => holidays.find(h => h.date === dateStr);
-  const isDayOff = isWeekend(selectedDate) || !!getHoliday(selectedDate);
+  // Helper untuk mencari data hari libur (Strict String Comparison)
+  const getHoliday = (dateStr: string) => {
+    return holidays.find(h => h.date.trim() === dateStr.trim());
+  };
+
+  // Logika penentu apakah hari ini libur (Sabtu, Minggu, atau Tanggal Merah)
+  const holidayData = getHoliday(selectedDate);
+  const isWeekendDay = isWeekend(selectedDate);
+  const isDayOff = isWeekendDay || !!holidayData;
 
   // SORTING: Sort by Name Alphabetically
   const filteredStudents = students
@@ -46,7 +55,10 @@ const AttendanceDaily: React.FC = () => {
   }, [selectedDate, selectedClass, attendance, students]); 
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
-    if (isDayOff) return; // Prevent change if day off
+    if (isDayOff) {
+      alert("Tidak dapat mengubah absensi pada Hari Libur / Akhir Pekan.");
+      return; 
+    }
     setLocalAttendance(prev => ({ ...prev, [studentId]: status }));
   };
 
@@ -55,9 +67,8 @@ const AttendanceDaily: React.FC = () => {
     
     // Prevent saving on holidays/weekends
     if (isDayOff) {
-      const holidayInfo = getHoliday(selectedDate);
-      const msg = holidayInfo ? `Hari Libur: ${holidayInfo.description}` : "Akhir Pekan (Sabtu/Minggu)";
-      return alert(`Tidak dapat menyimpan absensi. Hari ini adalah ${msg}.`);
+      const msg = holidayData ? `Hari Libur: ${holidayData.description}` : "Akhir Pekan (Sabtu/Minggu)";
+      return alert(`GAGAL MENYIMPAN.\nHari ini adalah ${msg}.\nAbsensi tidak dapat dilakukan.`);
     }
     
     const records: AttendanceRecord[] = Object.entries(localAttendance)
@@ -71,9 +82,60 @@ const AttendanceDaily: React.FC = () => {
       }));
     
     markAttendance(records);
-    // Menggunakan triggerSave agar menunggu data terupdate dulu baru dikirim
     triggerSave(); 
     alert('Data absensi berhasil disimpan dan sedang dikirim ke Spreadsheet...');
+  };
+
+  // --- LOGIKA IMPORT EXCEL ---
+  const handleImport = () => {
+    // Security check: Only Admin can import
+    if (currentUser?.role !== UserRole.ADMIN) {
+      return alert("Akses Ditolak. Fitur ini hanya untuk Admin.");
+    }
+
+    if (isDayOff) return alert("Tidak dapat menginput data pada hari libur.");
+
+    const lines = importText.trim().split(/\r?\n/);
+    let successCount = 0;
+    const newLocalAttendance = { ...localAttendance };
+
+    lines.forEach(line => {
+      const parts = line.split('\t');
+      // Harapan: Kolom 1 = NISN atau Nama, Kolom 2 = Status (H/S/I/A)
+      if (parts.length >= 2) {
+        const key = parts[0].trim(); // Bisa NISN atau Nama
+        const statusRaw = parts[1].trim().toUpperCase();
+
+        // Cari siswa di kelas yang sedang dipilih
+        // Prioritas cari by NISN, jika tidak ketemu cari by Nama (Case insensitive)
+        const student = filteredStudents.find(s => 
+          s.nisn === key || s.name.toLowerCase() === key.toLowerCase()
+        );
+
+        if (student) {
+          // Mapping status
+          let status: AttendanceStatus = AttendanceStatus.NONE;
+          if (['H', 'HADIR', 'PRESENT'].includes(statusRaw)) status = AttendanceStatus.HADIR;
+          else if (['S', 'SAKIT', 'SICK'].includes(statusRaw)) status = AttendanceStatus.SAKIT;
+          else if (['I', 'IZIN', 'PERMIT'].includes(statusRaw)) status = AttendanceStatus.IZIN;
+          else if (['A', 'ALPA', 'ABSENT'].includes(statusRaw)) status = AttendanceStatus.ALPA;
+
+          if (status !== AttendanceStatus.NONE) {
+            newLocalAttendance[student.id] = status;
+            successCount++;
+          }
+        }
+      }
+    });
+
+    if (successCount > 0) {
+      setLocalAttendance(newLocalAttendance);
+      alert(`Berhasil membaca ${successCount} data absensi dari text. Silakan cek tabel lalu tekan tombol 'Simpan Absensi'.`);
+      setImportText('');
+      setShowImport(false);
+    } else {
+      alert("Tidak ada data yang cocok. Pastikan format: [NISN/Nama] [Tab] [Status H/S/I/A]");
+    }
   };
 
   const formatPhone = (phone: string | undefined) => {
@@ -150,7 +212,6 @@ const AttendanceDaily: React.FC = () => {
     text += `--------------------------------\n`;
     text += `_SD Negeri 5 Bilato_`;
 
-    // Copy to clipboard and open WA
     navigator.clipboard.writeText(text).then(() => {
         alert("Rekap berhasil disalin! Mengarahkan ke WhatsApp...");
         window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
@@ -160,18 +221,17 @@ const AttendanceDaily: React.FC = () => {
   const StatusButton = ({ sId, type, label, color }: any) => (
     <button
       onClick={() => handleStatusChange(sId, type)}
+      disabled={isDayOff} // DISABLE BUTTON SECARA HARDCODE
       className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
         localAttendance[sId] === type 
           ? `bg-${color}-600 text-white shadow-md` 
           : `bg-gray-100 text-gray-500 hover:bg-${color}-50 hover:text-${color}-600`
-      } ${isDayOff ? 'opacity-50 cursor-not-allowed' : ''}`}
-      disabled={isDayOff}
+      } ${isDayOff ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''}`}
     >
       {label}
     </button>
   );
 
-  // Get students who are absent (S/I/A) for bulk modal
   const absentStudents = filteredStudents.filter(s => {
     const status = localAttendance[s.id];
     return status === AttendanceStatus.SAKIT || status === AttendanceStatus.IZIN || status === AttendanceStatus.ALPA;
@@ -193,25 +253,39 @@ const AttendanceDaily: React.FC = () => {
             className="border p-2 rounded-lg text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
           />
           {currentUser?.role === UserRole.ADMIN && (
-             <select 
-               value={selectedClass} 
-               onChange={e => setSelectedClass(e.target.value)}
-               className="border p-2 rounded-lg text-gray-700 bg-white"
-             >
-               {['1','2','3','4','5','6'].map(c => <option key={c} value={c}>Kelas {c}</option>)}
-             </select>
+             <div className="flex gap-2">
+                <select 
+                  value={selectedClass} 
+                  onChange={e => setSelectedClass(e.target.value)}
+                  className="border p-2 rounded-lg text-gray-700 bg-white"
+                >
+                  {['1','2','3','4','5','6'].map(c => <option key={c} value={c}>Kelas {c}</option>)}
+                </select>
+                <button 
+                  onClick={() => setShowImport(true)}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 shadow-sm"
+                  title="Copy Paste dari Excel"
+                >
+                  <Upload size={18} />
+                  <span className="hidden md:inline">Import</span>
+                </button>
+             </div>
           )}
         </div>
       </div>
 
       {isDayOff ? (
-        <div className="bg-red-50 border border-red-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 text-center animate-pulse">
-          <AlertCircle size={48} className="text-red-500 mb-2" />
-          <h3 className="text-lg font-bold text-red-700">Tidak Ada Absensi Hari Ini</h3>
-          <p className="text-red-600 font-medium">
-            {getHoliday(selectedDate)?.description || "Hari Libur Akhir Pekan (Sabtu/Minggu)"}
-          </p>
-          <p className="text-xs text-red-500 mt-2">Tombol simpan dan input absensi dinonaktifkan.</p>
+        <div className="bg-red-50 border-2 border-red-200 p-10 rounded-xl flex flex-col items-center justify-center space-y-4 text-center">
+          <CalendarOff size={64} className="text-red-500" />
+          <div>
+            <h3 className="text-2xl font-bold text-red-700">Tidak Ada Absensi</h3>
+            <p className="text-red-600 font-medium text-lg mt-2">
+              {holidayData ? `Hari Libur: ${holidayData.description}` : "Akhir Pekan (Sabtu / Minggu)"}
+            </p>
+          </div>
+          <div className="bg-white px-4 py-2 rounded-lg border border-red-100 text-red-500 text-sm shadow-sm">
+             Sistem dikunci. Anda tidak dapat mengisi atau menyimpan absen pada tanggal ini.
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
@@ -364,6 +438,44 @@ const AttendanceDaily: React.FC = () => {
             <div className="mt-4 pt-4 border-t flex justify-end">
                <button onClick={() => setShowBulkModal(false)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">
                  Tutup
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT EXCEL MODAL */}
+      {showImport && currentUser?.role === UserRole.ADMIN && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <Upload className="text-green-600" />
+                Import Absensi (Copy-Paste)
+              </h3>
+              <button onClick={() => setShowImport(false)}><X size={20} className="text-gray-400 hover:text-gray-600"/></button>
+            </div>
+            
+            <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 mb-4 border border-blue-100">
+              <p className="font-bold mb-1">Panduan Format Excel:</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Kolom 1: <strong>NISN</strong> atau <strong>Nama Siswa</strong></li>
+                <li>Kolom 2: <strong>Status</strong> (H, S, I, A)</li>
+                <li>Contoh: <code className="bg-white px-1 rounded">0012345678  S</code></li>
+              </ul>
+            </div>
+
+            <textarea 
+              className="w-full h-40 border p-3 rounded-lg text-sm font-mono focus:ring-2 focus:ring-green-500 outline-none resize-none" 
+              placeholder={"0012345678\tS\nBudi Santoso\tI\n..."}
+              value={importText}
+              onChange={e => setImportText(e.target.value)}
+            />
+
+            <div className="flex justify-end gap-3 mt-4">
+               <button onClick={() => setShowImport(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+               <button onClick={handleImport} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-lg shadow-green-500/30">
+                 Proses Input
                </button>
             </div>
           </div>

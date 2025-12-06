@@ -3,15 +3,17 @@ import React, { useState } from 'react';
 import { useApp } from '../store';
 import { UserRole } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Users } from 'lucide-react';
+import { User, Lock, Users, GraduationCap, School } from 'lucide-react';
+import { DEFAULT_LOGO_URL } from '../constants';
 
 const Login: React.FC = () => {
-  const { login, students, teachers, logoUrl } = useApp();
+  const { login, students, teachers } = useApp();
   const navigate = useNavigate();
   const [roleMode, setRoleMode] = useState<'ADMIN' | 'TEACHER' | 'PARENT' | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [imgError, setImgError] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,11 +64,18 @@ const Login: React.FC = () => {
         {/* Left Side: Brand */}
         <div className="md:w-1/2 bg-blue-50 p-8 flex flex-col justify-center items-center text-center border-r border-blue-100">
           <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 shadow-lg p-2 overflow-hidden">
-            <img 
-              src={logoUrl} 
-              alt="Logo SDN 5 Bilato" 
-              className="w-full h-full object-contain"
-            />
+             {!imgError ? (
+                <img 
+                  src={DEFAULT_LOGO_URL} 
+                  alt="Logo SDN 5 Bilato" 
+                  className="w-full h-full object-contain"
+                  onError={() => setImgError(true)}
+                />
+             ) : (
+                <div className="w-full h-full flex items-center justify-center text-blue-600">
+                    <School size={80} />
+                </div>
+             )}
           </div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">SD NEGERI 5 BILATO</h1>
           <p className="text-gray-500 mb-8">Sistem Absensi Digital Terpadu</p>

@@ -1,43 +1,21 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../store';
 import { UserRole } from '../types';
+import { DEFAULT_LOGO_URL } from '../constants';
 import { 
   LayoutDashboard, Users, UserCheck, Calendar, GraduationCap, 
-  Settings, LogOut, Menu, X, FileText, UserCog, Cloud, RefreshCw, Clock, Database, Upload
+  Settings, LogOut, Menu, X, FileText, UserCog, Cloud, RefreshCw, Clock, Database, School
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, logout, academicYears, isSyncing, lastSync, logoUrl, updateLogo } = useApp();
+  const { currentUser, logout, academicYears, isSyncing, lastSync } = useApp();
   const [isOpen, setIsOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const location = useLocation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeYear = academicYears.find(y => y.isActive)?.name || "N/A";
-
-  const handleLogoClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Ukuran file terlalu besar. Maksimal 2MB.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          updateLogo(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const MenuItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
     <Link 
@@ -71,27 +49,21 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         md:relative md:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="p-6 border-b flex flex-col items-center text-center relative group">
-          {/* Hidden File Input */}
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            accept="image/*" 
-            className="hidden" 
-          />
+        <div className="p-6 border-b flex flex-col items-center text-center">
           
-          <div className="relative cursor-pointer" onClick={handleLogoClick} title="Klik untuk ganti logo">
-            <img 
-              src={logoUrl} 
-              alt="Logo" 
-              className="w-16 h-16 object-contain mb-3 hover:opacity-80 transition-opacity"
-            />
-            {currentUser.role === UserRole.ADMIN && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                 <Upload className="text-white w-6 h-6" />
-              </div>
-            )}
+          <div className="relative w-24 h-24 mb-3 flex items-center justify-center">
+             {!imgError ? (
+                <img 
+                  src={DEFAULT_LOGO_URL} 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                  onError={() => setImgError(true)}
+                />
+             ) : (
+                <div className="w-full h-full bg-blue-100 rounded-full flex items-center justify-center text-blue-600 border-4 border-white shadow-sm">
+                   <School size={48} />
+                </div>
+             )}
           </div>
 
           <h1 className="text-xl font-bold text-blue-700 leading-tight">SDN 5 BILATO</h1>

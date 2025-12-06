@@ -4,7 +4,8 @@ import { AcademicYear, Headmaster, Student, Teacher, Holiday } from './types';
 // URL Script yang sudah di-hardcode agar langsung terhubung
 export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyQqeFCj9CRsKL7bK9JmPkQxy9CUxPks11pRGzTb0CRglXyUIMWJQrnn4lXjTCz3dUBbw/exec';
 
-export const DEFAULT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/9/9c/Logo_Tut_Wuri_Handayani.svg";
+// Menggunakan versi PNG yang lebih stabil daripada SVG
+export const DEFAULT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Logo_Tut_Wuri_Handayani.svg/512px-Logo_Tut_Wuri_Handayani.svg.png";
 
 export const INITIAL_HEADMASTER: Headmaster = {
   name: "Drs. H. Ahmad Fauzi, M.Pd",

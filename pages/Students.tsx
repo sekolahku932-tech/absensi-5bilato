@@ -57,27 +57,45 @@ const Students: React.FC = () => {
   };
 
   const handleImport = () => {
-    const lines = importText.trim().split('\n');
+    // Robust split handling for Windows (\r\n) and Unix (\n)
+    const lines = importText.trim().split(/\r?\n/);
     let count = 0;
-    lines.forEach(line => {
+    
+    lines.forEach((line, index) => {
+      // Split by tab
       const parts = line.split('\t');
-      if (parts.length >= 2) {
+      // Must have at least Name and NISN
+      if (parts.length >= 2 && parts[0].trim()) {
+        const name = parts[0].trim();
+        const nisn = parts[1].trim();
+        const gender = (parts[2]?.trim().toUpperCase() === 'P') ? 'P' : 'L';
+        const phone = parts[3]?.trim() || '';
+
         addStudent({
-          id: Math.random().toString(36).substr(2, 9),
-          name: parts[0],
-          nisn: parts[1],
-          gender: parts[2] === 'P' ? 'P' : 'L',
+          // Create unique ID for each iteration
+          id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
+          name: name,
+          nisn: nisn,
+          gender: gender,
           classId: filterClass,
-          parentPhone: parts[3] || '',
+          parentPhone: phone,
           isActive: true
         });
         count++;
       }
     });
-    setImportText('');
-    setShowImport(false);
-    triggerSave();
-    alert(`Berhasil import ${count} data siswa.`);
+
+    if (count > 0) {
+      setImportText('');
+      setShowImport(false);
+      // Only trigger save once after loop finishes
+      // Because we fixed store.tsx to use functional updates, 
+      // all students will be in the state when this triggers.
+      triggerSave();
+      alert(`Berhasil import ${count} data siswa.`);
+    } else {
+      alert("Tidak ada data valid yang ditemukan. Pastikan format: Nama [Tab] NISN [Tab] L/P [Tab] No.WA");
+    }
   };
 
   const handleDelete = (id: string) => {

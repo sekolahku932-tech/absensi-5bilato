@@ -43,9 +43,9 @@ const MonthlyReport: React.FC = () => {
     // Check holiday/weekend
     const dateObj = new Date(dateStr);
     const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-    const isHoliday = holidays.some(h => h.date === dateStr);
+    const isHoliday = holidays.some(h => h.date.trim() === dateStr);
     
-    if (isHoliday) return { code: 'L', color: 'bg-red-200' };
+    if (isHoliday) return { code: 'L', color: 'bg-red-300' }; // Merah lebih jelas untuk hari libur
     if (isWeekend) return { code: '', color: 'bg-gray-200' };
     
     if (record) {
@@ -64,7 +64,6 @@ const MonthlyReport: React.FC = () => {
       const isHoliday = holidays.some(h => h.date === a.date);
       
       // Strict check: Only count attendance record if it is NOT a weekend and NOT a holiday
-      // This prevents "ghost" attendance if admin adds a holiday retroactively.
       return a.studentId === studentId && 
              d.getMonth() + 1 === selectedMonth && 
              d.getFullYear() === selectedYear &&
@@ -90,7 +89,7 @@ const MonthlyReport: React.FC = () => {
     totalA += stats.A;
   });
 
-  // Calculate Effective Days (Days that are not weekends or holidays)
+  // Calculate Effective Days
   let effectiveDaysCount = 0;
   daysArray.forEach(d => {
     if (isSchoolDay(d)) effectiveDaysCount++;
@@ -119,7 +118,7 @@ const MonthlyReport: React.FC = () => {
           th, td { border: 1px solid black; padding: 4px; text-align: center; }
           .header { text-align: center; margin-bottom: 20px; }
           .bg-gray { background-color: #ddd !important; -webkit-print-color-adjust: exact; }
-          .bg-red { background-color: #ffcccc !important; -webkit-print-color-adjust: exact; }
+          .bg-red { background-color: #f87171 !important; -webkit-print-color-adjust: exact; color: white; }
           .recap-section { margin-top: 20px; font-size: 11px; width: 40%; }
           .recap-section th { text-align: left; background-color: #f0f0f0; }
           .footer { margin-top: 40px; display: flex; justify-content: space-between; }
@@ -143,7 +142,15 @@ const MonthlyReport: React.FC = () => {
               <th colspan="4">Jumlah</th>
             </tr>
             <tr>
-              ${daysArray.map(d => `<th>${d}</th>`).join('')}
+              ${daysArray.map(d => {
+                const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const isHol = holidays.some(h => h.date.trim() === dateStr);
+                const isWk = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6;
+                let thClass = "";
+                if(isHol) thClass = "bg-red";
+                else if(isWk) thClass = "bg-gray";
+                return `<th class="${thClass}">${d}</th>`;
+              }).join('')}
               <th>H</th><th>S</th><th>I</th><th>A</th>
             </tr>
           </thead>
@@ -156,7 +163,6 @@ const MonthlyReport: React.FC = () => {
                 let cls = '';
                 if (st.color.includes('gray')) cls = 'bg-gray';
                 if (st.color.includes('red') && st.code === 'L') cls = 'bg-red';
-                // Render empty cell for holidays (L) to match "Tidak Ada Absen" visual
                 cells += `<td class="${cls}">${st.code === 'L' || st.code === '' ? '' : st.code}</td>`;
               }
               return `
@@ -316,9 +322,20 @@ const MonthlyReport: React.FC = () => {
                 <th colSpan={4} className="p-2 border border-blue-100 text-center">Total</th>
               </tr>
               <tr className="bg-blue-50 text-blue-900">
-                {daysArray.map(d => (
-                  <th key={d} className="p-1 border border-blue-100 w-8 text-center">{d}</th>
-                ))}
+                {daysArray.map(d => {
+                   const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                   const isHol = holidays.some(h => h.date.trim() === dateStr);
+                   const isWk = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6;
+                   let bgClass = "";
+                   if (isHol) bgClass = "bg-red-300 text-red-900";
+                   else if (isWk) bgClass = "bg-gray-200";
+
+                   return (
+                     <th key={d} className={`p-1 border border-blue-100 w-8 text-center ${bgClass}`}>
+                       {d}
+                     </th>
+                   )
+                })}
                 <th className="p-1 border border-blue-100 bg-green-100">H</th>
                 <th className="p-1 border border-blue-100 bg-yellow-100">S</th>
                 <th className="p-1 border border-blue-100 bg-blue-100">I</th>
