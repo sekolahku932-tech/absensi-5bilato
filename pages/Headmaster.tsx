@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
 import { User, Save } from 'lucide-react';
 
 const Headmaster: React.FC = () => {
-  const { headmaster, updateHeadmaster } = useApp();
+  const { headmaster, updateHeadmaster, triggerSave } = useApp();
   const [name, setName] = useState(headmaster.name);
   const [nip, setNip] = useState(headmaster.nip);
 
@@ -15,6 +16,7 @@ const Headmaster: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateHeadmaster({ name, nip });
+    triggerSave();
     alert("Data Kepala Sekolah berhasil diperbarui.");
   };
 

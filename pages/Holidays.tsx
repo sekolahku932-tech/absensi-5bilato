@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../store';
 import { Holiday } from '../types';
 import { Plus, Trash2, Calendar, Upload, X } from 'lucide-react';
 
 const Holidays: React.FC = () => {
-  const { holidays, toggleHoliday, deleteHoliday } = useApp();
+  const { holidays, toggleHoliday, deleteHoliday, triggerSave } = useApp();
   const [date, setDate] = useState('');
   const [desc, setDesc] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -18,6 +19,7 @@ const Holidays: React.FC = () => {
         date,
         description: desc
       });
+      triggerSave();
       setDate('');
       setDesc('');
     }
@@ -42,6 +44,7 @@ const Holidays: React.FC = () => {
       }
     });
     alert(`Berhasil mengimport ${count} hari libur.`);
+    triggerSave();
     setImportText('');
     setShowImport(false);
   };
@@ -120,7 +123,7 @@ const Holidays: React.FC = () => {
                     <td className="p-4 font-medium">{h.description}</td>
                     <td className="p-4 text-center">
                       <button 
-                        onClick={() => deleteHoliday(h.id)} 
+                        onClick={() => { deleteHoliday(h.id); triggerSave(); }}
                         className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"
                       >
                         <Trash2 size={18} />

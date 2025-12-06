@@ -6,7 +6,7 @@ import { Plus, Trash2, Edit2, Upload, ExternalLink, ArrowRight, TrendingUp, User
 import { CLASS_LIST } from '../constants';
 
 const Students: React.FC = () => {
-  const { students, addStudent, updateStudent, deleteStudent, moveToAlumni, promoteStudent, currentUser, activeYear, syncToCloud } = useApp();
+  const { students, addStudent, updateStudent, deleteStudent, moveToAlumni, promoteStudent, currentUser, triggerSave } = useApp();
   
   // UI States
   const [showFormModal, setShowFormModal] = useState(false);
@@ -52,7 +52,7 @@ const Students: React.FC = () => {
     } else {
       addStudent({ ...formData, id: Date.now().toString() });
     }
-    syncToCloud(true);
+    triggerSave();
     setShowFormModal(false);
   };
 
@@ -76,14 +76,14 @@ const Students: React.FC = () => {
     });
     setImportText('');
     setShowImport(false);
-    syncToCloud(true);
+    triggerSave();
     alert(`Berhasil import ${count} data siswa.`);
   };
 
   const handleDelete = (id: string) => {
     if(window.confirm('Hapus data siswa ini secara permanen?')) {
         deleteStudent(id);
-        syncToCloud(true);
+        triggerSave();
     }
   };
 
@@ -112,7 +112,7 @@ const Students: React.FC = () => {
       promoteStudent(selectedStudent.id, promoteTargetClass, ''); 
     }
     
-    syncToCloud(true);
+    triggerSave();
     setShowPromoteModal(false);
     setSelectedStudent(null);
   };
@@ -128,7 +128,7 @@ const Students: React.FC = () => {
   const handleAlumniProcess = () => {
     if (!selectedStudent) return;
     moveToAlumni(selectedStudent.id, alumniData.reason as AlumniReason, alumniData.date);
-    syncToCloud(true);
+    triggerSave();
     setShowAlumniModal(false);
     setSelectedStudent(null);
   };

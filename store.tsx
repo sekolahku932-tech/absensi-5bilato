@@ -6,7 +6,7 @@ import {
 } from './types';
 import { 
   INITIAL_STUDENTS, INITIAL_TEACHERS, INITIAL_YEARS, 
-  INITIAL_HOLIDAYS, INITIAL_HEADMASTER, DEFAULT_SCRIPT_URL 
+  INITIAL_HOLIDAYS, INITIAL_HEADMASTER, DEFAULT_SCRIPT_URL, DEFAULT_LOGO_URL 
 } from './constants';
 
 interface AppContextType extends AppState {
@@ -28,10 +28,13 @@ interface AppContextType extends AppState {
   toggleHoliday: (h: Holiday) => void;
   deleteHoliday: (id: string) => void;
   
+  updateLogo: (url: string) => void; // Function to update logo
+
   // Sync
   setGoogleScriptUrl: (url: string) => void;
   syncToCloud: (silent?: boolean) => Promise<boolean>;
   syncFromCloud: () => Promise<boolean>;
+  triggerSave: () => void; // New safe save method
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -46,23 +49,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [headmaster, setHeadmaster] = useState<Headmaster>(INITIAL_HEADMASTER);
   const [currentUser, setCurrentUser] = useState<AppState['currentUser']>(null);
   
+  const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO_URL);
+
   const [googleScriptUrl, setGoogleScriptUrl] = useState<string>(DEFAULT_SCRIPT_URL);
   const [lastSync, setLastSync] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Flag to trigger sync after state update
+  const [pendingSave, setPendingSave] = useState(false);
 
   // Refs for Sync to access latest state inside async functions
   const stateRef = useRef({
     students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl
   });
 
+  // --- SYNC LOGIC DEFINITION (Moved up to be used in effect) ---
+  const syncToCloud = async (silent = false) => {
+    const url = stateRef.current.googleScriptUrl;
+    if (!url) return false;
+    
+    setIsSyncing(true);
+    try {
+      const payload = {
+        action: 'write',
+        data: {
+          Students: stateRef.current.students,
+          Teachers: stateRef.current.teachers,
+          Attendance: stateRef.current.attendance,
+          Alumni: stateRef.current.alumni,
+          Holidays: stateRef.current.holidays,
+          AcademicYears: stateRef.current.academicYears,
+          Headmaster: [stateRef.current.headmaster] 
+        }
+      };
+
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      
+      const now = new Date().toLocaleString();
+      setLastSync(now);
+      if(!silent) console.log("Data sent to spreadsheet successfully");
+      return true;
+    } catch (e) {
+      if (!silent) console.error("Sync Error", e);
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Safe Trigger Function
+  const triggerSave = () => {
+    setPendingSave(true);
+  };
+
+  // Update Ref and Trigger Sync if Pending
   useEffect(() => {
     stateRef.current = { students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl };
-  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl]);
+    
+    if (pendingSave) {
+      syncToCloud(true);
+      setPendingSave(false);
+    }
+  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, pendingSave]);
 
   // --- INITIALIZATION LOGIC ---
   useEffect(() => {
     const initializeApp = async () => {
-      // 1. Try Local Storage first (Instant Load)
       const saved = localStorage.getItem('absensi_app_data');
       
       if (saved) {
@@ -77,16 +134,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed.headmaster) setHeadmaster(parsed.headmaster);
           if (parsed.googleScriptUrl) setGoogleScriptUrl(parsed.googleScriptUrl);
           if (parsed.lastSync) setLastSync(parsed.lastSync);
+          if (parsed.logoUrl) setLogoUrl(parsed.logoUrl);
         } catch (e) { console.error("Failed to load local data", e); }
       }
 
-      // 2. ALWAYS Try to Sync from Cloud on startup
+      // Sync from cloud on init
       const scriptUrl = saved ? JSON.parse(saved).googleScriptUrl || DEFAULT_SCRIPT_URL : DEFAULT_SCRIPT_URL;
-      
       if (scriptUrl) {
         setIsSyncing(true);
         try {
-          // Pass the URL directly to avoid closure stale state issues during init
           await performSyncFromCloud(scriptUrl);
         } catch (e) {
           console.error("Auto-sync failed on startup:", e);
@@ -102,9 +158,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Save to Local Storage on every change
   useEffect(() => {
     localStorage.setItem('absensi_app_data', JSON.stringify({ 
-      students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync
+      students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync, logoUrl
     }));
-  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync]);
+  }, [students, teachers, attendance, alumni, academicYears, holidays, headmaster, googleScriptUrl, lastSync, logoUrl]);
 
   const login = (role: UserRole, data?: any) => {
     if (role === UserRole.ADMIN) {
@@ -171,54 +227,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleHoliday = (h: Holiday) => setHolidays([...holidays, h]);
   const deleteHoliday = (id: string) => setHolidays(holidays.filter(h => h.id !== id));
 
-  // --- SYNC LOGIC ---
+  const updateLogo = (url: string) => setLogoUrl(url);
 
-  const syncToCloud = async (silent = false) => {
-    const url = stateRef.current.googleScriptUrl;
-    if (!url) return false;
-    
-    setIsSyncing(true);
-    try {
-      const payload = {
-        action: 'write',
-        data: {
-          Students: stateRef.current.students,
-          Teachers: stateRef.current.teachers,
-          Attendance: stateRef.current.attendance,
-          Alumni: stateRef.current.alumni,
-          Holidays: stateRef.current.holidays,
-          AcademicYears: stateRef.current.academicYears,
-          Headmaster: [stateRef.current.headmaster] 
-        }
-      };
-
-      // PERBAIKAN: Menggunakan content-type text/plain untuk menghindari Preflight CORS error
-      // Google Apps Script doPost akan menerima body sebagai string
-      await fetch(url, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-      
-      const now = new Date().toLocaleString();
-      setLastSync(now);
-      if(!silent) console.log("Data sent to spreadsheet successfully");
-      return true;
-    } catch (e) {
-      if (!silent) console.error("Sync Error", e);
-      return false;
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Separated function so it can be called with a specific URL during init
   const performSyncFromCloud = async (url: string) => {
     const response = await fetch(url, {
       method: 'POST', 
-      // Untuk Read, kita juga gunakan text/plain jika perlu, tapi biasanya fetch standard okay jika server allow.
-      // Namun untuk konsistensi dengan GAS Web App:
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'read' })
     });
@@ -226,7 +239,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const data = await response.json();
     
     if (data) {
-      // Fix Type Mismatch for ClassId (Convert to string just in case Excel sent numbers)
       if (data.Students && Array.isArray(data.Students)) {
         setStudents(data.Students.map((s: any) => ({...s, classId: String(s.classId), nisn: String(s.nisn)})));
       }
@@ -263,11 +275,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       students, teachers, attendance, academicYears, holidays, headmaster, currentUser, alumni,
-      googleScriptUrl, lastSync, isSyncing,
+      googleScriptUrl, lastSync, isSyncing, logoUrl,
       login, logout, addStudent, updateStudent, deleteStudent, promoteStudent, moveToAlumni,
       markAttendance, updateHeadmaster, addTeacher, updateTeacher, deleteTeacher,
       setAcademicYear, addAcademicYear, deleteAcademicYear, toggleHoliday, deleteHoliday,
-      setGoogleScriptUrl, syncToCloud, syncFromCloud
+      setGoogleScriptUrl, syncToCloud, syncFromCloud, triggerSave, updateLogo
     }}>
       {children}
     </AppContext.Provider>

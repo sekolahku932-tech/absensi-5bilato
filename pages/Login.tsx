@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, Users } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const { login, students, teachers } = useApp();
+  const { login, students, teachers, logoUrl } = useApp();
   const navigate = useNavigate();
   const [roleMode, setRoleMode] = useState<'ADMIN' | 'TEACHER' | 'PARENT' | null>(null);
   const [username, setUsername] = useState('');
@@ -63,7 +63,7 @@ const Login: React.FC = () => {
         <div className="md:w-1/2 bg-blue-50 p-8 flex flex-col justify-center items-center text-center border-r border-blue-100">
           <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 shadow-lg p-2 overflow-hidden">
             <img 
-              src="https://drive.google.com/uc?export=view&id=1V4ZNw4dYOrfNjr0Kxqb-eD5z9KSzOxYZ" 
+              src={logoUrl} 
               alt="Logo SDN 5 Bilato" 
               className="w-full h-full object-contain"
             />

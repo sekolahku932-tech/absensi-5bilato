@@ -5,7 +5,7 @@ import { UserRole, AttendanceStatus, AttendanceRecord, Student } from '../types'
 import { Save, MessageCircle, AlertCircle, Share2, Send, X, CheckCircle, Smartphone } from 'lucide-react';
 
 const AttendanceDaily: React.FC = () => {
-  const { students, attendance, holidays, markAttendance, currentUser, academicYears, syncToCloud } = useApp();
+  const { students, attendance, holidays, markAttendance, currentUser, academicYears, triggerSave } = useApp();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedClass, setSelectedClass] = useState(currentUser?.classId || '1');
   const [localAttendance, setLocalAttendance] = useState<Record<string, AttendanceStatus>>({});
@@ -71,8 +71,9 @@ const AttendanceDaily: React.FC = () => {
       }));
     
     markAttendance(records);
-    syncToCloud(true); 
-    alert('Data absensi berhasil disimpan secara lokal dan sedang dikirim ke Spreadsheet...');
+    // Menggunakan triggerSave agar menunggu data terupdate dulu baru dikirim
+    triggerSave(); 
+    alert('Data absensi berhasil disimpan dan sedang dikirim ke Spreadsheet...');
   };
 
   const formatPhone = (phone: string | undefined) => {

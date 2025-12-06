@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../store';
 import { Teacher } from '../types';
@@ -5,7 +6,7 @@ import { Plus, Trash2, Edit2, Upload, Save, X } from 'lucide-react';
 import { CLASS_LIST } from '../constants';
 
 const Teachers: React.FC = () => {
-  const { teachers, addTeacher, updateTeacher, deleteTeacher } = useApp();
+  const { teachers, addTeacher, updateTeacher, deleteTeacher, triggerSave } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
@@ -23,6 +24,7 @@ const Teachers: React.FC = () => {
     } else {
       addTeacher({ ...formData, id: Date.now().toString() });
     }
+    triggerSave();
     setShowModal(false);
     setFormData(initialForm);
   };
@@ -36,6 +38,7 @@ const Teachers: React.FC = () => {
   const handleDelete = (id: string) => {
     if (window.confirm('Yakin ingin menghapus data guru ini?')) {
       deleteTeacher(id);
+      triggerSave();
     }
   };
 
@@ -58,6 +61,7 @@ const Teachers: React.FC = () => {
       }
     });
     alert(`Berhasil mengimport ${count} data guru.`);
+    triggerSave();
     setImportText('');
     setShowImport(false);
   };

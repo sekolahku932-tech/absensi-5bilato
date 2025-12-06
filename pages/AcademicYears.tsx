@@ -4,7 +4,7 @@ import { useApp } from '../store';
 import { Plus, Trash2, CheckCircle, Circle, Calendar } from 'lucide-react';
 
 const AcademicYears: React.FC = () => {
-  const { academicYears, addAcademicYear, setAcademicYear, deleteAcademicYear, syncToCloud } = useApp();
+  const { academicYears, addAcademicYear, setAcademicYear, deleteAcademicYear, triggerSave } = useApp();
   const [newYear, setNewYear] = useState('');
 
   const handleAdd = (e: React.FormEvent) => {
@@ -12,21 +12,21 @@ const AcademicYears: React.FC = () => {
     if (newYear.trim()) {
       addAcademicYear(newYear.trim());
       setNewYear('');
-      syncToCloud(true);
+      triggerSave();
     }
   };
 
   const handleActivate = (id: string) => {
     if (window.confirm('Aktifkan tahun pelajaran ini? Data absensi akan tercatat di tahun yang baru.')) {
       setAcademicYear(id);
-      syncToCloud(true);
+      triggerSave();
     }
   };
 
   const handleDelete = (id: string) => {
     if (window.confirm('Hapus tahun pelajaran ini secara permanen?')) {
       deleteAcademicYear(id);
-      syncToCloud(true);
+      triggerSave();
     }
   };
 

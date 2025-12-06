@@ -81,6 +81,7 @@ export interface AppState {
   holidays: Holiday[];
   headmaster: Headmaster;
   currentUser: { role: UserRole; id?: string; name?: string; classId?: string } | null;
+  logoUrl: string; // Add logo URL to state
   
   // Sync State
   googleScriptUrl?: string;
